@@ -2,6 +2,7 @@
 import { PDFViewer } from './pdf-viewer.js';
 import { StorageDB } from './storage.js';
 window.StorageDB = StorageDB; // <— adaugă linia asta
+window.dispatchEvent(new Event('app-boot-ready')); // <— adaugă asta
 
 // 4.1. Service Worker + PWA
 if ('serviceWorker' in navigator) {
@@ -78,3 +79,4 @@ document.getElementById('pdf-close')?.addEventListener('click', () => {
   const panel = document.getElementById('pdf-viewer-panel');
   panel.style.display = 'none';
 });
+
