@@ -212,22 +212,25 @@ const progressText = document.getElementById('progress-text');
 
 // —— Boot automat fără folder, dacă avem deja JSON-urile în IndexedDB ——
 // —— Boot automat fără folder, după ce app-boot e gata ——
-window.addEventListener('app-boot-ready', async () => {
-  try {
-    const themesFromIDB = await window.StorageDB.getJSON('capitole.json'); // fără ?.
-    if (themesFromIDB) {
-      themes = themesFromIDB;
-      const booksFromIDB = await window.StorageDB.getJSON('carti.json');
-      if (Array.isArray(booksFromIDB)) books = booksFromIDB;
+function runBootFromIDB() {
+  (async () => {
+    try {
+      const themesFromIDB = await window.StorageDB.getJSON('capitole.json');
+      if (themesFromIDB) {
+        themes = themesFromIDB;
+        const booksFromIDB = await window.StorageDB.getJSON('carti.json');
+        if (Array.isArray(booksFromIDB)) books = booksFromIDB;
 
-      fileSelDiv.style.display = 'none';
-      histBtnDiv.style.display = 'block';
-      showThemes();
+        fileSelDiv.style.display = 'none';
+        histBtnDiv.style.display = 'block';
+        showThemes();
+      }
+    } catch (e) {
+      console.warn('Boot from IDB failed:', e);
     }
-  } catch (e) {
-    console.warn('Boot from IDB failed:', e);
-  }
-});
+  })();
+}
+
 
 
     openBtn.onclick = async () => {
@@ -720,4 +723,5 @@ nextBtn.onclick = () => {
   </script>
 </body>
 </html>
+
 
