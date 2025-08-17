@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Platformă Grile</title>
+  <link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0ea5e9">
+
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
+    h1, h2, h3 { text-align: center; }
+    ul { list-style: none; padding: 0; }
+    li { margin: 0.5rem 0; }
+    button { display: block; margin: 1rem auto; padding: 0.5rem 1rem; font-size: 1rem; }
+    .answer { display: flex; align-items: center; margin: 0.5rem 0; padding: 0.25rem; }
+    .answer.correct { background: #e0f8e9; }
+    .answer.incorrect { background: #f8e0e0; }
+    .answer.missed { background: #f0f0f0; color: #666; }
+    .answer label { flex: 1; cursor: pointer; }
+    .info { font-size: 0.875rem; color: #666; margin: 0.5rem 0; }
+    #score-display { text-align: center; margin: 1rem 0; font-weight: bold; }
+    .result-summary { font-size: 0.875rem; color: #444; margin: 0.5rem 0; }
+    .points { color: #2a9d8f; font-weight: bold; }
+    .cs-indicator { font-size: 0.875rem; color: #e76f51; margin-left: 0.5rem; }
+    #average-percentage { text-align: center; font-weight: bold; margin-bottom: 1rem; }
+	/* Bara de progres */
+#progress-container {
+  width: 100%;
+  background: #f0f0f0;
+  border-radius: 5px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  height: 20px;
+  position: relative;
+}
+#progress-fill {
+  height: 100%;
+  width: 0%;
+  background: #2a9d8f;
+  transition: width 0.3s ease;
+}
+#progress-text {
+  position: absolute;
+  top: 0; left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.875rem;
+  line-height: 20px;
+}
+.info a.page-link { text-decoration: underline; cursor: pointer; }
+.info a.page-link:hover { opacity: 0.85; }
+.cs-indicator { margin-left: .5rem; font-size: .9rem; color: #666; }
+  </style>
+</head>
+<body>
+
+<!-- PDF viewer docked panel -->
+<div id="pdf-viewer-panel" style="display:none; position:fixed; right:0; top:0; bottom:0; width:46vw; min-width:420px; background:#111; color:#fff; box-shadow:-8px 0 24px rgba(0,0,0,.35); z-index:9999; overflow:auto;">
+  <div style="display:flex; align-items:center; gap:.5rem; padding:.5rem .75rem; border-bottom:1px solid #222;">
+    <button id="pdf-close" title="Închide" style="cursor:pointer;">✕</button>
+    <strong style="flex:1">Carte</strong>
+    <label style="font-size:.9em;"><input id="pdf-pin" type="checkbox"> menține deschis</label>
+  </div>
+  <div id="pdf-canvas-host" style="padding:8px;"></div>
+</div>
+<script type="module" src="./app-boot.js"></script>
+
+  <!-- 1. Selectează folderul -->
+  <div id="file-selector">
+    <h1>Deschide folderul cu grile</h1>
+    <button id="open-folder">Selectează folder</button>
+  </div>
+
+  <!-- Buton istoric teste -->
+  <div id="history-btn-container" style="display:none; text-align:center;">
+    <button id="history-btn">Istoric teste</button>
+  </div>
+
+  <!-- 2. Alege tematica -->
+  <div id="theme-selection" style="display:none;">
+    <h1>Alege tematica</h1>
+    <ul id="themes"></ul>
+  </div>
+
+  <!-- 3. Alege capitole -->
+  <div id="chapter-selection" style="display:none;">
+    <h1>Alege capitolele</h1>
+    <ul id="chapters"></ul>
+    <button id="back-to-themes">Înapoi</button>
+    <button id="next-to-config">Continuă</button>
+  </div>
+
+  <!-- 4. Configurare test -->
+  <div id="config" style="display:none;">
+    <h1>Configurare test</h1>
+    <label>Număr întrebări: <input type="number" id="num-questions" min="1" value="10"></label>
+    <label><input type="checkbox" id="randomize"> Grile aleatorii</label>
+	<!-- Filtru opțional după pagini: vizibil DOAR când e selectat exact un capitol -->
+<div id="page-filter" style="display:none; margin-top: 1rem; padding: 0.75rem; border: 1px dashed #bbb; border-radius: 8px;">
+  <label style="display:block; margin-bottom:0.5rem;">
+    <input type="checkbox" id="page-filter-toggle">
+    Grile doar din paginile selectate
+  </label>
+
+  <div id="page-filter-fields" style="display:none; gap: 0.5rem; align-items:center;">
+    <label>De la pagina
+      <input type="number" id="page-start" min="1" style="width: 6rem;">
+    </label>
+    <label>Până la pagina
+      <input type="number" id="page-end" min="1" style="width: 6rem;">
+    </label>
+    <span id="page-eligible" style="margin-left:auto; font-size:0.9rem; color:#555;"></span>
+  </div>
+  <div id="page-filter-hint" style="margin-top:0.5rem; font-size:0.85rem; color:#777;">
+    (Disponibil numai când e selectat un singur capitol)
+  </div>
+</div>
+    <button id="start-test">Începe testul</button>
+    <button id="back-to-chapters-2">Înapoi la capitole</button>
+  </div>
+
+  <!-- 5. Quiz -->
+  <div id="quiz" style="display:none;">
+    <button id="back-to-chapters">Înapoi la capitole</button>
+    <div id="score-display">Scor: 0</div>
+	
+	<!-- Bara de progres -->
+    <div id="progress-container" style="display:none;">
+      <div id="progress-fill"></div>
+      <span id="progress-text"></span>
+    </div>
+
+    <!-- Question area -->
+    <div id="question-container">
+      <h2 id="question-text"></h2>
+      <div id="info" class="info"></div>
+      <div id="answers"></div>
+      <div id="result-summary" class="result-summary"></div>
+      <button id="submit-btn">Trimite răspunsul</button>
+      <button id="prev-btn" style="display:none;">Vezi grila anterioară</button>
+      <button id="next-btn" style="display:none;">Vezi grila următoare</button>
+    </div>
+
+    <!-- Final summary area -->
+    <div id="final-screen" style="display:none;"></div>
+  </div>
+
+  <!-- 6. Istoric teste -->
+  <div id="history-screen" style="display:none;">
+    <h1>Istoric teste</h1>
+    <p id="average-percentage"></p>
+    <ul id="history-list"></ul>
+    <button id="back-from-history">Înapoi</button>
+  </div>
+
+  <script>
+    let dirHandle;
+    let fileMap = {}, themes = [], chapters = [], chapterQs = [], questions = [];
+    let current = 0, answered = false, score = 0, totalPossible = 0;
+	let finalSaved = false;
+    let history = [], historyData = [];
+    let selectedChapters = [];
+	
+	// ===== Cărți & viewer =====
+let books = [];                        // din carti.json
+let bookHandles = {};                  // { id: FileSystemFileHandle }
+let bookObjectURLs = {};               // { id: string }  // URL.createObjectURL(...)
+let viewerWindows = {};                // { id: Window }  // ferestre numite per carte
+
+// ===== Filtru pagini (doar single-capitol) =====
+const pageFilterDiv    = document.getElementById('page-filter');
+const pageFilterTgl    = document.getElementById('page-filter-toggle');
+const pageFilterFields = document.getElementById('page-filter-fields');
+const pageStartInp     = document.getElementById('page-start');
+const pageEndInp       = document.getElementById('page-end');
+const pageEligibleSpan = document.getElementById('page-eligible');
+
+
+    const openBtn    = document.getElementById('open-folder');
+    const fileSelDiv = document.getElementById('file-selector');
+    const histBtnDiv = document.getElementById('history-btn-container');
+    const historyBtn = document.getElementById('history-btn');
+    const themeSel    = document.getElementById('theme-selection');
+    const chapSel     = document.getElementById('chapter-selection');
+    const cfgDiv      = document.getElementById('config');
+    const quizDiv     = document.getElementById('quiz');
+    const histScreen  = document.getElementById('history-screen');
+    const themesUl    = document.getElementById('themes');
+    const chapsUl     = document.getElementById('chapters');
+    const numInp      = document.getElementById('num-questions');
+    const randCb      = document.getElementById('randomize');
+    const scoreDisp   = document.getElementById('score-display');
+    const qText       = document.getElementById('question-text');
+    const infoDiv     = document.getElementById('info');
+    const ansDiv      = document.getElementById('answers');
+    const resSum      = document.getElementById('result-summary');
+    const subBtn      = document.getElementById('submit-btn');
+    const prevBtn     = document.getElementById('prev-btn');
+    const nextBtn     = document.getElementById('next-btn');
+    const qContainer  = document.getElementById('question-container');
+    const finalScreen = document.getElementById('final-screen');
+    const avgPctEl    = document.getElementById('average-percentage');
+    const backToThemes = document.getElementById('back-to-themes');
+    const nextToConfig = document.getElementById('next-to-config');
+    const backToCh2    = document.getElementById('back-to-chapters-2');
+    const startTestBtn = document.getElementById('start-test');
+    const backToCh     = document.getElementById('back-to-chapters');
+    const backFromHist = document.getElementById('back-from-history');
+	const progressCont = document.getElementById('progress-container');
+const progressFill = document.getElementById('progress-fill');
+const progressText = document.getElementById('progress-text');
+
+// —— Boot automat fără folder, dacă avem deja JSON-urile în IndexedDB ——
+(async function bootFromIDB() {
+  try {
+    const themesFromIDB = await window.StorageDB?.getJSON('capitole.json');
+    if (themesFromIDB) {
+      themes = themesFromIDB;
+      const booksFromIDB = await window.StorageDB.getJSON('carti.json');
+      if (Array.isArray(booksFromIDB)) {
+        books = booksFromIDB;
+      }
+      // trecem direct la ecranul de teme
+      fileSelDiv.style.display = 'none';
+      histBtnDiv.style.display = 'block';
+      showThemes();
+    }
+  } catch (e) {
+    console.warn('Boot from IDB failed:', e);
+  }
+})();
+
+
+    openBtn.onclick = async () => {
+      dirHandle = await window.showDirectoryPicker();
+      fileMap = {};
+      for await (const [name, handle] of dirHandle.entries()) {
+        if (handle.kind === 'file') fileMap[name] = await handle.getFile();
+      }
+      if (!fileMap['capitole.json']) { alert('Nu s-a găsit capitole.json'); return; }
+      themes = await readJSON(fileMap['capitole.json']);
+	  // 4.a) Încarc carti.json dacă există și rezolv căile relative către PDF-uri
+if (fileMap['carti.json']) {
+  try {
+    books = await readJSON(fileMap['carti.json']); // [{id,titlu,fisier}]
+    // Pentru fiecare carte, obține FileHandle pornind de la dirHandle și calea relativă
+    for (const b of books) {
+      const fh = await getFileHandleByRelativePath(dirHandle, b.fisier);
+      if (fh) bookHandles[b.id] = fh;
+    }
+  } catch (e) {
+    console.warn('Eroare la citirea carti.json sau la rezolvarea căilor', e);
+  }
+}
+
+// ——— Salvare locală o singură dată (IndexedDB) pentru „un singur click” data viitoare ———
+try {
+  // Construiesc hărțile necesare pentru saveLibraryOnce
+  const booksMap = {};        // { idCarte: File }
+  const libraryIndex = {};    // { idCarte: "cale/relativa.pdf" }
+  if (Array.isArray(books) && books.length) {
+    for (const b of books) {
+      const fh = bookHandles[b.id];
+      if (fh) {
+        const f = await fh.getFile();
+        booksMap[b.id] = f;
+        libraryIndex[b.id] = b.fisier; // păstrăm calea relativă din carti.json ca fallback
+      }
+    }
+  }
+
+  const jsonsMap = {
+    'capitole.json': themes
+  };
+  if (Array.isArray(books) && books.length) {
+    jsonsMap['carti.json'] = books;
+  }
+
+  // Apelul propriu-zis: salvează în IndexedDB cărțile și JSON-urile
+  await saveLibraryOnce({ booksMap, jsonsMap, libraryIndex });
+} catch (e) {
+  console.warn('Nu am reușit să salvez biblioteca local:', e);
+}
+
+
+      showThemes(); fileSelDiv.style.display = 'none'; histBtnDiv.style.display = 'block';
+    };
+
+    historyBtn.onclick = loadHistory;
+    backFromHist.onclick = () => { hideAll(); showThemes(); };
+
+    function hideAll() {
+      [fileSelDiv, histBtnDiv, themeSel, chapSel, cfgDiv, quizDiv, histScreen].forEach(el => el.style.display = 'none');
+    }
+
+    function showThemes() {
+      hideAll(); histBtnDiv.style.display = 'block'; themesUl.innerHTML = '';
+      const liAll = document.createElement('li'); const btnAll = document.createElement('button');
+      btnAll.textContent = 'Simulare generală'; btnAll.onclick = selectAll;
+      liAll.appendChild(btnAll); themesUl.appendChild(liAll);
+      themes.forEach((t, i) => {
+        const li = document.createElement('li'); const btn = document.createElement('button');
+        btn.textContent = t.titlu; btn.onclick = () => selectTheme(i);
+        li.appendChild(btn); themesUl.appendChild(li);
+      });
+      themeSel.style.display = 'block';
+    }
+
+    function selectTheme(i) { chapters = themes[i].capitole; showChapters(); }
+    function selectAll() { chapters = []; themes.forEach(t => chapters.push(...t.capitole)); showChapters(); }
+
+    function showChapters() {
+      hideAll(); chapsUl.innerHTML = ''; chapters.forEach((ch, i) => {
+        const li = document.createElement('li'); const lab = document.createElement('label'); const cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.value = ch.fisier; cb.dataset.index = i;
+        lab.appendChild(cb); lab.appendChild(document.createTextNode(ch.titlu)); li.appendChild(lab); chapsUl.appendChild(li);
+      });
+      backToThemes.onclick = showThemes; nextToConfig.onclick = gotoConfig; chapSel.style.display = 'block';
+    }
+
+    function gotoConfig() {
+      const checked = Array.from(chapsUl.querySelectorAll('input:checked'));
+      if (!checked.length) { alert('Selectează cel puțin un capitol!'); return; }
+      selectedChapters = checked.map(cb => chapters[cb.dataset.index]);
+      const selFiles = checked.map(cb => cb.value);
+      Promise.all(selFiles.map(f => readJSON(fileMap[f]))).then(arr => {
+        chapterQs = arr; 
+		// Augmentez fiecare întrebare cu _book și _pages (fără a scrie pe disc)
+chapterQs.forEach(arrCap => {
+  arrCap.forEach(q => augmentQuestion(q));
+});
+
+// Dacă e selectat EXACT un capitol, arăt filtrul de pagini (altfel îl ascund)
+if (chapterQs.length === 1) {
+  pageFilterDiv.style.display = 'block';
+  // reset UI
+  pageFilterTgl.checked = false;
+  pageFilterFields.style.display = 'none';
+  pageEligibleSpan.textContent = '';
+  pageStartInp.value = ''; pageEndInp.value = '';
+  // hook-uri UI
+  pageFilterTgl.onchange = updatePageFilterUI;
+  pageStartInp.oninput = recomputeEligibleCount;
+  pageEndInp.oninput = recomputeEligibleCount;
+} else {
+  pageFilterDiv.style.display = 'none';
+}
+
+		hideAll();
+        const totalQ = arr.reduce((s, a) => s + a.length, 0);
+        numInp.max = totalQ; numInp.value = Math.min(10, totalQ);
+        cfgDiv.style.display = 'block';
+      });
+    }
+    backToCh2.onclick = showChapters;
+
+    startTestBtn.onclick = () => {
+  const N    = +numInp.value;
+  const rand = randCb.checked;
+  const k    = chapterQs.length;
+
+  let picks = [];
+
+  if (k === 1) {
+    // SINGLE CAPITOL
+    let pool = [...chapterQs[0]];
+    // dacă e activ filtrul de pagini → filtrez pool-ul
+    if (pageFilterDiv.style.display !== 'none' && pageFilterTgl.checked) {
+      const start = parseInt(pageStartInp.value, 10);
+      const end   = parseInt(pageEndInp.value, 10);
+      if (!isNaN(start) && !isNaN(end) && start >= 1 && end >= start) {
+        pool = pool.filter(q => q._pages && q._pages.some(n => n >= start && n <= end));
+      }
+    }
+    if (rand) pool.sort(() => Math.random() - 0.5);
+    if (pool.length < N) {
+      alert(`În interval sunt doar ${pool.length} întrebări; testul va avea ${pool.length}.`);
+    }
+    picks = pool.slice(0, Math.min(N, pool.length));
+  } else {
+    // MULTI-CAPITOL (comportamentul actual, fără filtru)
+    const base = Math.floor(N / k);
+    const rem  = N % k;
+    chapterQs.forEach((arr, i) => {
+      const cnt = base + (i < rem ? 1 : 0);
+      if (rand) { const c = [...arr]; c.sort(() => Math.random() - 0.5); picks.push(...c.slice(0, cnt)); }
+      else picks.push(...arr.slice(0, cnt));
+    });
+  }
+
+  const questionsLocal = rand && k > 1 ? picks.sort(() => Math.random() - 0.5) : picks;
+  questions = questionsLocal;
+
+  totalPossible = questions.reduce((s, q) => s + (q.corect.length === 1 ? 4 : 5), 0);
+  current = 0; score = 0; history.length = 0; finalSaved = false;
+
+  hideAll(); quizDiv.style.display = 'block'; updateScore();
+  progressCont.style.display = 'block'; updateProgress(); showQuestion();
+};
+
+    backToCh.onclick = showChapters;
+
+    function readJSON(file) {
+      return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(JSON.parse(r.result)); r.onerror = () => rej(); r.readAsText(file); });
+    }
+	// Rezolvă o cale relativă la folderul selectat (ex. "carti/chirurgie.pdf")
+async function getFileHandleByRelativePath(rootDirHandle, relPath) {
+  try {
+    const parts = relPath.split('/').filter(Boolean);
+    let dir = rootDirHandle;
+    for (let i = 0; i < parts.length - 1; i++) {
+      dir = await dir.getDirectoryHandle(parts[i], { create: false });
+    }
+    const fileHandle = await dir.getFileHandle(parts[parts.length - 1], { create: false });
+    return fileHandle;
+  } catch (e) {
+    console.warn('Nu pot rezolva calea relativă:', relPath, e);
+    return null;
+  }
+}
+
+function augmentQuestion(q) {
+  // 1) book după prefixul din info.text
+  const t = (q.info && q.info.text || '').trim();
+  q._book = detectBookFromPrefix(t); // 'medicina' | 'chirurgie' | 'sinopsis' | null
+  // 2) pagini extrase (liste, intervale, etc.)
+  q._pages = extractPages(t);        // number[] (poate fi gol)
+}
+
+// 1. Maparea automată carte → după prefix
+function detectBookFromPrefix(infoText) {
+  const m = infoText.match(/^\s*([0-9]+)\./);
+  if (!m) return null;
+  const first = m[1];
+  if (first === '1') return 'medicina';
+  if (first === '2') return 'chirurgie';
+  if (first === '3') return 'sinopsis';
+  return null;
+}
+
+// 2. Extrage pagini din textul info (acceptă: "Pag. 334", "pp. 334–336", "Pag. 1172, 1175")
+function extractPages(infoText) {
+  // căutăm secvențe după "pag", "p.", "pp.", "pagina", etc.
+  const lower = infoText.toLowerCase();
+  const idx = lower.search(/\b(pag\.?|p\.|pp\.?|pagina)\b/);
+  if (idx < 0) return [];
+  const slice = infoText.slice(idx); // de la "Pag..." încolo
+  // extrag doar cifre, virgule, punct și liniuță/en-dash într-o „bulă”
+  const m = slice.match(/(pag\.?|p\.|pp\.?|pagina)\s*([0-9,\s\-–]+)/i);
+  if (!m) return [];
+  const raw = m[2];
+  // separ valori prin virgulă/punct și virgulă/; și expandăm intervalele 334-336 / 334–336
+  const parts = raw.split(/[;,]/).map(s => s.trim()).filter(Boolean);
+  let pages = [];
+  for (const p of parts) {
+    const range = p.split(/[–-]/).map(s => s.trim()).filter(Boolean);
+    if (range.length === 1) {
+      const n = parseInt(range[0], 10);
+      if (!isNaN(n)) pages.push(n);
+    } else if (range.length === 2) {
+      const a = parseInt(range[0], 10), b = parseInt(range[1], 10);
+      if (!isNaN(a) && !isNaN(b) && a <= b) {
+        for (let x = a; x <= b; x++) pages.push(x);
+      }
+    }
+  }
+  // unice + ordonate
+  pages = Array.from(new Set(pages)).sort((a,b)=>a-b);
+  return pages;
+}
+
+function updatePageFilterUI() {
+  pageFilterFields.style.display = pageFilterTgl.checked ? 'flex' : 'none';
+  if (pageFilterTgl.checked) recomputeEligibleCount(); else pageEligibleSpan.textContent = '';
+}
+
+function recomputeEligibleCount() {
+  const start = parseInt(pageStartInp.value, 10);
+  const end   = parseInt(pageEndInp.value, 10);
+  if (isNaN(start) || isNaN(end) || start < 1 || end < 1 || start > end) {
+    pageEligibleSpan.textContent = 'Selectează un interval valid.';
+    return;
+  }
+  // avem un singur capitol aici
+  const arr = chapterQs[0];
+  const elig = arr.filter(q => q._pages && q._pages.some(n => n >= start && n <= end)).length;
+  pageEligibleSpan.textContent = `Întrebări disponibile în interval: ${elig}`;
+}
+
+// Înlocuiește funcția openBookAt existentă cu aceasta
+async function openBookAt(bookId, pageNumber) {
+  return jumpToPage(bookId, pageNumber);
+}
+
+
+
+
+function formatInfoWithPageLinks(infoText, q) {
+  // Dacă nu avem pagini extrase, rămânem la text simplu
+  if (!q._pages || q._pages.length === 0) {
+    return escapeHTML(infoText);
+  }
+  // Încercăm să despărțim partea de „Pag...” pentru a înlocui doar numerele cu linkuri
+  const m = infoText.match(/^(.*?)(\b(pag\.?|p\.|pp\.?|pagina)\b)(.*)$/i);
+  const base = m ? m[1] : infoText;
+  const pagLabel = m ? m[2] : 'Pag.';
+  // Linkuri distincte pentru fiecare pagină
+  const links = q._pages.map(n => `<a class="page-link" href="#" data-page="${n}" data-book="${q._book || ''}">${n}</a>`).join(', ');
+  const tail = m ? '' : ''; // nu mai păstrăm șirul vechi de numere; punem linkurile curate
+
+  // asamblăm UI: [partea inițială] + 'Pag.' + linkurile
+  const html = `${escapeHTML(base)} ${escapeHTML(pagLabel)} ${links}`;
+  // după ce plasăm HTML-ul, atașăm handler-ele pe linkuri
+  // (le vom atașa în showQuestion imediat după setarea innerHTML)
+  setTimeout(() => {
+    infoDiv.querySelectorAll('a.page-link').forEach(a => {
+      a.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        const pg = parseInt(a.getAttribute('data-page'), 10);
+        const bk = a.getAttribute('data-book') || null;
+        jumpToPage(bk, pg);
+
+      });
+    });
+  }, 0);
+  return html;
+}
+
+// Escape helper pentru text
+function escapeHTML(s) {
+  return s.replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+
+
+
+    function showQuestion(idx) {
+      
+// 1. index-ul întrebării
+  const i = idx != null ? idx : current;
+  // 2. modul readonly vine doar dacă am deja un răspuns salvat
+  const readOnly = history[i] !== undefined;
+  // 3. dacă n-am salvat niciun răspuns, e live şi resetez flag-ul
+  answered = readOnly;
+  // 4. afișez bara de progres pe orice grilă (live sau revizuire)
+  progressCont.style.display = 'block';
+  updateProgress();
+  // 5. pregătesc ecranul
+  qContainer.style.display  = 'block';
+  finalScreen.style.display = 'none';
+  resSum.textContent        = '';
+
+	  const q = questions[i]; const corr = q.corect.split('');
+      qText.textContent = q.intrebare;
+      if (corr.length === 1) { const cs = document.createElement('span'); cs.className = 'cs-indicator'; cs.textContent = '(CS)'; qText.appendChild(cs); }
+      // Construim info + linkuri de pagini (dacă există)
+const infoText = q.info?.text || '';
+infoDiv.innerHTML = formatInfoWithPageLinks(infoText, q);
+
+      ansDiv.innerHTML = '';
+      q.raspunsuri.forEach(txt => {
+        const l = txt.charAt(0); const div = document.createElement('div'); div.className = 'answer';
+        div.innerHTML = `<label><input type="checkbox" value="${l}" ${readOnly ? 'disabled' : ''}> ${txt}</label>`;
+        ansDiv.appendChild(div);
+      });
+      if (readOnly) {
+        const record = history[i];
+        ansDiv.querySelectorAll('input').forEach((cb,j) => cb.checked = record.sels.includes(cb.value));
+        ansDiv.querySelectorAll('.answer').forEach((div,j) => div.className = record.marks[j]);
+      }
+      if (!readOnly && corr.length === 1) {
+        const boxes = ansDiv.querySelectorAll('input');
+        boxes.forEach(cb => cb.onchange = e => { if (e.target.checked) boxes.forEach(o => { if (o !== e.target) o.checked = false; }); });
+      }
+// Buttons visibility & acţiuni pentru butonul principal
+if (readOnly && i === questions.length - 1) {
+  // ultima întrebare deja trimisă: afișăm Finalizare
+  subBtn.style.display   = 'block';
+  subBtn.textContent     = 'Finalizare';
+  subBtn.onclick         = showFinal;
+} else {
+  // în rest: dacă e readonly nu afișăm submit, altfel Trimite răspunsul
+  subBtn.style.display   = readOnly ? 'none' : 'block';
+  subBtn.textContent     = 'Trimite răspunsul';
+  subBtn.onclick         = readOnly ? null : submitAnswer;
+}
+
+// prevBtn: întotdeauna vizibil dacă nu e prima întrebare
+prevBtn.style.display     = (i > 0) ? 'block' : 'none';
+
+// nextBtn: doar în revizuire și numai dacă nu e ultima
+nextBtn.style.display     = (readOnly && i < questions.length - 1) ? 'block' : 'none';
+      // Buttons actions
+prevBtn.onclick = () => {
+  current = i - 1;
+  showQuestion(current);
+};
+
+// Merg înainte: actualizez current și afișez
+nextBtn.onclick = () => {
+  const nextIdx = i + 1;
+  current = nextIdx;
+  showQuestion(current);
+};
+     
+    }
+	
+	function updateProgress() {
+  const pct = Math.round(((current + 1) / questions.length) * 100);
+  progressFill.style.width  = pct + '%';
+  progressText.textContent   = (current + 1) + ' / ' + questions.length;
+}
+
+    function submitAnswer() {
+      if (answered) return; answered = true;
+      const q = questions[current]; const corr = q.corect.split(''); const sels = Array.from(ansDiv.querySelectorAll('input:checked')).map(cb => cb.value);
+      let pts = 0;
+      if (corr.length === 1) {
+        if (sels.length === 1 && sels[0] === corr[0]) pts = 4;
+      } else if (sels.length >=2 && sels.length <=4) {
+        ['A','B','C','D','E'].forEach(l => { if ((corr.includes(l)) === sels.includes(l)) pts++; });
+      }
+      const marks = [];
+      ansDiv.querySelectorAll('.answer').forEach(div => {
+        const cb = div.querySelector('input'); const l = cb.value;
+        if (cb.checked) div.classList.add(corr.includes(l) ? 'correct' : 'incorrect');
+        else if (corr.includes(l)) div.classList.add('missed');
+        marks.push(div.className);
+      });
+      history[current] = { sels, marks };
+      score += pts; updateScore();
+      resSum.innerHTML = `<span>Corect: ${q.corect}</span> <span class="points">+${pts} Pct.</span>`;
+      if (current < questions.length - 1) { subBtn.textContent = 'Următoarea grilă'; subBtn.onclick = () => { current++; showQuestion(); }; }
+      else { subBtn.textContent = 'Finalizare'; subBtn.onclick = showFinal; progressCont.style.display = 'none';}
+        if (current < questions.length - 1) {
+    subBtn.textContent = 'Următoarea grilă';
+    subBtn.onclick = () => { current++; showQuestion(); };
+  } else {
+    subBtn.textContent = 'Finalizare';
+    subBtn.onclick = showFinal;
+    progressCont.style.display = 'none';
+  }
+	}
+
+    function showFinal() {
+  // ascunde zona de întrebări și arată ecranul final
+  qContainer.style.display   = 'none';
+  finalScreen.style.display  = 'block';
+  resSum.textContent         = '';
+
+  // construiesc recordul imediat (îl folosesc mai jos la afișare chiar dacă nu îl salvez)
+  const now = new Date();
+  const rec = {
+    total:         totalPossible,
+    numQuestions:  questions.length,
+    score:         score,
+    percent:       Math.round((score / totalPossible) * 100),
+    chapters:      selectedChapters.map(ch => ch.titlu),
+    date:          now.toLocaleDateString(),
+    time:          now.toLocaleTimeString()
+  };
+
+  // salvez o singură dată
+  if (!finalSaved) {
+    historyData.push(rec);
+    saveHistoryData();
+    finalSaved = true;
+  }
+
+  // afișez UI-ul
+  finalScreen.innerHTML = `
+    <h2>Ai terminat testul!</h2>
+    <h3>${rec.score} din ${rec.total} puncte (${rec.percent}%)</h3>
+    <button id="prev-final">Vezi grila anterioară</button>
+    <button id="back-to-themes-final">Înapoi la tematică</button>
+  `;
+
+  document.getElementById('prev-final').onclick = () => showQuestion(questions.length - 1);
+  document.getElementById('back-to-themes-final').onclick = showThemes;
+}
+
+    function updateScore() { scoreDisp.textContent = `Scor: ${score}`; }
+
+    async function loadHistory() {
+      if (!dirHandle) return;
+      const handle = await dirHandle.getFileHandle('istoric_teste.json', { create: true });
+      const file = await handle.getFile();
+      try { historyData = JSON.parse(await file.text()); } catch { historyData = []; }
+      renderHistory();
+    }
+
+    function renderHistory() {
+      const list = document.getElementById('history-list'); list.innerHTML = '';
+      if (historyData.length) {
+        const sum = historyData.reduce((s, r) => s + r.percent, 0);
+        const avg = Math.round(sum / historyData.length);
+        avgPctEl.textContent = `Media tuturor procentelor: ${avg}%`;
+      } else {
+        avgPctEl.textContent = 'Nu există teste în istoricul curent.';
+      }
+      historyData.forEach((rec,i) => {
+        const li = document.createElement('li');
+        li.innerHTML = `<strong>${rec.date} ${rec.time}</strong> - Ai rezolvat ${rec.numQuestions} întrebări din capitolele <em>${rec.chapters.join(', ')}</em> - ${rec.score}/${rec.total} puncte (${rec.percent}%)`;
+        const del = document.createElement('button'); del.textContent = 'Șterge'; del.onclick = () => deleteHistory(i);
+        li.appendChild(del); list.appendChild(li);
+      });
+      hideAll(); histScreen.style.display = 'block';
+    }
+
+    async function deleteHistory(index) { historyData.splice(index,1); await saveHistoryData(); renderHistory(); }
+
+    async function saveHistoryData() {
+      if (!dirHandle) return;
+      const handle = await dirHandle.getFileHandle('istoric_teste.json',{create:true});
+      const writable = await handle.createWritable(); await writable.write(JSON.stringify(historyData,null,2)); await writable.close();
+    }
+	window.addEventListener('beforeunload', () => {
+  Object.values(bookObjectURLs).forEach(u => { try { URL.revokeObjectURL(u); } catch(_){} });
+});
+
+  </script>
+</body>
+</html>
