@@ -230,6 +230,11 @@ function runBootFromIDB() {
     }
   })();
 }
+	  // Run now if app-boot already set window.StorageDB:
+if (window.StorageDB) runBootFromIDB();
+
+// Also run when the module finishes loading:
+window.addEventListener('app-boot-ready', runBootFromIDB);
 
 
 
@@ -723,5 +728,6 @@ nextBtn.onclick = () => {
   </script>
 </body>
 </html>
+
 
 
