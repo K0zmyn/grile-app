@@ -211,16 +211,15 @@ const progressFill = document.getElementById('progress-fill');
 const progressText = document.getElementById('progress-text');
 
 // —— Boot automat fără folder, dacă avem deja JSON-urile în IndexedDB ——
-(async function bootFromIDB() {
+// —— Boot automat fără folder, după ce app-boot e gata ——
+window.addEventListener('app-boot-ready', async () => {
   try {
-    const themesFromIDB = await window.StorageDB?.getJSON('capitole.json');
+    const themesFromIDB = await window.StorageDB.getJSON('capitole.json'); // fără ?.
     if (themesFromIDB) {
       themes = themesFromIDB;
       const booksFromIDB = await window.StorageDB.getJSON('carti.json');
-      if (Array.isArray(booksFromIDB)) {
-        books = booksFromIDB;
-      }
-      // trecem direct la ecranul de teme
+      if (Array.isArray(booksFromIDB)) books = booksFromIDB;
+
       fileSelDiv.style.display = 'none';
       histBtnDiv.style.display = 'block';
       showThemes();
@@ -228,7 +227,7 @@ const progressText = document.getElementById('progress-text');
   } catch (e) {
     console.warn('Boot from IDB failed:', e);
   }
-})();
+});
 
 
     openBtn.onclick = async () => {
@@ -721,3 +720,4 @@ nextBtn.onclick = () => {
   </script>
 </body>
 </html>
+
